@@ -45,7 +45,7 @@ WIKI = "https://github.com/vlachoudis/bCNC/wiki"
 
 SERIAL_POLL    = 0.125	# s
 SERIAL_TIMEOUT = 0.10	# s
-G_POLL	       = 10	# s
+G_POLL	       = 1	# s
 RX_BUFFER_SIZE = 128
 
 GPAT	  = re.compile(r"[A-Za-z]\s*[-+]?\d+.*")
@@ -131,6 +131,11 @@ class Sender:
 		self._onStart    = ""
 		self._onStop     = ""
 
+		self._gpoll = G_POLL
+
+		# For the case where there is a Pendant with direct access to the GRBL controller
+		# we will need to poll the offsets more often to pick up the deltas.
+		self._pollOffsets = False
 
 	#----------------------------------------------------------------------
 	def controllerLoad(self):
@@ -172,6 +177,8 @@ class Sender:
 	def loadConfig(self):
 		self.controllerSet(Utils.getStr("Connection", "controller"))
 		Pendant.port	 = Utils.getInt("Connection","pendantport",Pendant.port)
+		self._gpoll      = Utils.getFloat("Connection","gpoll",G_POLL)
+		self._pollOffsets = Utils.getBool("Connection", "polloffsets", false )
 		GCode.LOOP_MERGE = Utils.getBool("File","dxfloopmerge")
 		self.loadHistory()
 
@@ -820,7 +827,10 @@ class Sender:
 
 				tosend = None
 				if not self.running and t-tg > G_POLL:
-					tosend = b"$G\n" #FIXME: move to controller specific class
+					if self._pollOffsets:
+						tosend = b"$G\n$#\n" #FIXME: move to controller specific class
+					else:
+						tosend = b"$G\n" #FIXME: move to controller specific class
 					sline.append(tosend)
 					cline.append(len(tosend))
 					tg = t
